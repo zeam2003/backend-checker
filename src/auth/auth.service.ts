@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { LoginDto } from './dto/login.dto';
-import { AuthPayload } from '../auth/interface/auth.interface';
+import { AuthPayload } from './interfaces/auth.interface';
 
 @Injectable()
 export class AuthService {

@@ -12,7 +12,7 @@ import { CheckModule } from './check/check_module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      validationSchema,
+      validationSchema: validationSchema,
     }),
     AuthModule,
     CheckModule,

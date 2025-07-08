@@ -2,14 +2,17 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Check, CheckSchema } from './schemas/check.schema';
 import { CheckDetail, CheckDetailSchema } from './schemas/check-detail.schema';
-import { ConfigService } from '../config/config.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule, // ✅ Necesario para que funcione el inject
     MongooseModule.forRootAsync({
+      imports: [ConfigModule], // ✅ Necesario para acceder al servicio
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        uri: config.mongodbUri,
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get<string>('MONGODB_URI'), // ✅ Leemos del .env validado
+        dbName: 'check-db',
       }),
     }),
     MongooseModule.forFeature([
@@ -20,4 +23,5 @@ import { ConfigService } from '../config/config.service';
   exports: [MongooseModule],
 })
 export class DatabaseModule {}
+
 
