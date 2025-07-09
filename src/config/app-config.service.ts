@@ -24,4 +24,9 @@ export class AppConfigService {
   get isProduction(): boolean {
     return this.config.get<string>('NODE_ENV') === 'production';
   }
+
+  get jwtSecret(): string {
+  return this.config.get<string>('JWT_SECRET')!;
+}
+
 }
