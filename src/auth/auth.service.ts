@@ -8,6 +8,13 @@ import {
   TicketStatusEnum,
 } from './interfaces/ticket-status.enum';
 import { decode } from '../shared/utils/utils'; // ajustá la ruta si estás en otro nivel
+import { mapTicket, mapTicketFromSearch } from '../shared/utils/map-tickets';
+import { Ticket } from './interfaces/ticket.interface';
+import * as qs from 'qs';
+import { MyTicketsReportDto } from './dto/my-tickets-report.dto';
+import { GlpiSearchCriterion } from 'src/shared/interfaces/glpi-search-criterion.interface';
+import { STATUS_GROUPS } from 'src/shared/constants/status-label';
+import { getTickets } from 'src/shared/utils/glpi.utils';
 
 @Injectable()
 export class AuthService {
@@ -43,6 +50,9 @@ export class AuthService {
       date_creation: ticket.date_creation,
       date_mod: ticket.date_mod,
       content: decode(ticket.content || ''),
+      sla_time_to_resolve: ticket[30] ?? '',
+      sla_escalation_level: ticket[32] ?? '',
+      sla_time_to_own: ticket[37] ?? '',
     };
   }
 
@@ -140,80 +150,69 @@ export class AuthService {
     sessionToken: string,
     userId: number,
     page: number,
-    limit: number = 10,
+    limit: number = 30,
     startDate?: string,
     endDate?: string,
     status?: number[],
-  ): Promise<any> {
+  ): Promise<{
+    tickets: Ticket[];
+    paginacion: {
+      paginaActual: number;
+      elementosPorPagina: number;
+      total: number;
+    };
+  }> {
     const start = Math.max(0, (page - 1) * limit);
     const end = start + limit - 1;
 
     const params: any = {
-      is_deleted: 0,
       'criteria[0][link]': 'AND',
-      'criteria[0][field]': '_users_id_assign',
+      'criteria[0][field]': 4, // ID del campo usuario asignado
       'criteria[0][searchtype]': 'equals',
       'criteria[0][value]': userId,
-      expand_dropdowns: true,
-      expand_dropdown: '_users_id_assign',
-      sort: 'date_mod',
-      order: 'DESC',
-      get_hateoas: false,
+      
     };
-
+    params['forcedisplay[0]'] = 1;   // name
+    params['forcedisplay[1]'] = 2;   // id
+    params['forcedisplay[2]'] = 3;   // priority
+    params['forcedisplay[3]'] = 4;   // assignedTo
+    params['forcedisplay[4]'] = 5;   // entity
+    params['forcedisplay[5]'] = 7;   // category
+    params['forcedisplay[6]'] = 10;  // urgency
+    params['forcedisplay[7]'] = 11;  // impact
+    params['forcedisplay[8]'] = 12;  // status
+    params['forcedisplay[9]'] = 14;  // type
+    params['forcedisplay[10]'] = 15; // date_creation
+    params['forcedisplay[11]'] = 16; // closedate
+    params['forcedisplay[12]'] = 17; // solvedate
+    params['forcedisplay[13]'] = 18; // time_to_resolve
+    params['forcedisplay[14]'] = 19; // date_mod
+    params['forcedisplay[15]'] = 21; // content
+    params['forcedisplay[30]'] = 30; // SLA Nivel de escalamiento
+    // Agrega más si necesitas otros campos
     let criteriaIndex = 1;
 
-    if (startDate) {
-      params[`criteria[${criteriaIndex}][link]`] = 'AND';
-      params[`criteria[${criteriaIndex}][field]`] = 'date_mod';
-      params[`criteria[${criteriaIndex}][searchtype]`] = 'greater';
-      params[`criteria[${criteriaIndex}][value]`] = `${startDate} 00:00:00`;
-      criteriaIndex++;
-    }
-
-    if (endDate) {
-      params[`criteria[${criteriaIndex}][link]`] = 'AND';
-      params[`criteria[${criteriaIndex}][field]`] = 'date_mod';
-      params[`criteria[${criteriaIndex}][searchtype]`] = 'less';
-      params[`criteria[${criteriaIndex}][value]`] = `${endDate} 23:59:59`;
-      criteriaIndex++;
-    }
-
+    // ✅ Filtrado por múltiples status con AND + OR, usando el ID de campo 12 y agrupando
     if (status && status.length > 0) {
-      // Primera condición con AND
-      params[`criteria[${criteriaIndex}][link]`] = 'AND';
-      params[`criteria[${criteriaIndex}][field]`] = 'status';
-      params[`criteria[${criteriaIndex}][searchtype]`] = 'equals';
-      params[`criteria[${criteriaIndex}][value]`] = status[0];
-      criteriaIndex++;
-
-      // Las siguientes con OR
-      for (let i = 1; i < status.length; i++) {
-        params[`criteria[${criteriaIndex}][link]`] = 'OR';
-        params[`criteria[${criteriaIndex}][field]`] = 'status';
-        params[`criteria[${criteriaIndex}][searchtype]`] = 'in';
-        params[`criteria[${criteriaIndex}][value]`] = status[i];
+      status.forEach((stat, idx) => {
+        params[`criteria[${criteriaIndex}][link]`] = idx === 0 ? 'AND' : 'OR';
+        params[`criteria[${criteriaIndex}][field]`] = 12; // ID del campo status
+        params[`criteria[${criteriaIndex}][searchtype]`] = 'equals';
+        params[`criteria[${criteriaIndex}][value]`] = stat;
+        params[`criteria[${criteriaIndex}][group]`] = 1;
         criteriaIndex++;
-      }
+      });
     }
 
     try {
-      // Obtener total filtrado
-      console.log('🔎 Params enviados a GLPI:', params);
-      const countResponse = await this.axiosInstance.get('/Ticket', {
-        headers: {
-          'Session-Token': sessionToken,
-          'App-Token': this.config.glpiToken,
-          'Content-Type': 'application/json',
-        },
-        params: {
-          ...params,
-          only_count: true,
-        },
-      });
-      console.log('🧾 Respuesta cruda de GLPI (tickets):', countResponse.data);
-      // Obtener tickets paginados
-      const response = await this.axiosInstance.get('/Ticket', {
+      // Debug opcional
+      //console.log('🔎 Params enviados a GLPI:', params);
+
+      const queryString = qs.stringify(params, { encode: false });
+      console.log('🔍 URL final a GLPI:', `/search/Ticket?${queryString}`);
+
+      // Usar paramsSerializer para enviar el query string crudo
+      const response = await this.axiosInstance.get('/search/Ticket', {
         headers: {
           'Session-Token': sessionToken,
           'App-Token': this.config.glpiToken,
@@ -221,46 +220,179 @@ export class AuthService {
           Range: `${start}-${end}`,
         },
         params,
+        paramsSerializer: () => queryString,
       });
 
-      const mappedTickets = response.data.map((ticket: any) => ({
-        id: ticket.id,
-        name: ticket.name,
-        status_code: ticket.status,
-        status: TicketStatusEnum[ticket.status] || 'Desconocido',
-        priority: ticket.priority ?? 'N/A',
-        category: ticket.itilcategories_id ?? 'N/A',
-        assignedTo:
-          ticket._users_id_assign?.name ||
-          (ticket._users_id_assign?.realname ||
-          ticket._users_id_assign?.firstname
-            ? `${ticket._users_id_assign?.firstname || ''} ${ticket._users_id_assign?.realname || ''}`.trim()
-            : 'Sin asignar'),
-        entity: ticket.entities_id ?? 'N/A',
-        date_creation: ticket.date_creation,
-        date_mod: ticket.date_mod,
-        content: decode(ticket.content || ''),
-      }));
+      //console.log('respuesta en crudo', response);
+
+      // Mostrar la respuesta cruda de GLPI antes del mapeo
+      console.log('Respuesta cruda de GLPI:', JSON.stringify(response.data.data, null, 2));
+
+      const mappedTickets = Array.isArray(response.data.data)
+        ? response.data.data.map(mapTicketFromSearch)
+        : [];
 
       return {
         tickets: mappedTickets,
         paginacion: {
           paginaActual: Number(page) || 1,
           elementosPorPagina: Number(limit),
-          total: Array.isArray(countResponse.data)
-            ? countResponse.data.length
-            : 0,
+          total: mappedTickets.length, // Solo contamos los tickets devueltos
         },
       };
     } catch (error) {
-      console.error('Error al obtener tickets:', error.response?.data || error);
-      throw new HttpException(
-        'Error al obtener tickets',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      if (error.response) {
+        console.error('GLPI error:', error.response.data);
+        throw new HttpException(
+          typeof error.response.data === 'string'
+            ? error.response.data
+            : JSON.stringify(error.response.data),
+          error.response.status || 500,
+        );
+      }
+      throw new HttpException(error.message || 'Error desconocido', 500);
     }
   }
 
+  async getNextToExpireTickets(sessionToken: string, userId: number): Promise<{ tickets: Ticket[]; paginacion: { paginaActual: number; elementosPorPagina: number; total: number } }> {
+    // Reutiliza la lógica de getMyTickets pero limitando a 3 y ordenando por time_to_resolve (ID 18)
+    const status = [2, 4];
+    const limit = 3;
+    const page = 1;
+
+    const params: any = {
+      'criteria[0][link]': 'AND',
+      'criteria[0][field]': 4, // usuario asignado
+      'criteria[0][searchtype]': 'equals',
+      'criteria[0][value]': userId,
+      'sort': 18, // ordenar por time_to_resolve
+      'order': 'ASC',
+    };
+    let criteriaIndex = 1;
+    status.forEach((stat, idx) => {
+      params[`criteria[${criteriaIndex}][link]`] = idx === 0 ? 'AND' : 'OR';
+      params[`criteria[${criteriaIndex}][field]`] = 12;
+      params[`criteria[${criteriaIndex}][searchtype]`] = 'equals';
+      params[`criteria[${criteriaIndex}][value]`] = stat;
+      params[`criteria[${criteriaIndex}][group]`] = 1;
+      criteriaIndex++;
+    });
+    // forcedisplay[] igual que en getMyTickets
+    params['forcedisplay[0]'] = 1;
+    params['forcedisplay[1]'] = 2;
+    params['forcedisplay[2]'] = 3;
+    params['forcedisplay[3]'] = 4;
+    params['forcedisplay[4]'] = 5;
+    params['forcedisplay[5]'] = 7;
+    params['forcedisplay[6]'] = 10;
+    params['forcedisplay[7]'] = 11;
+    params['forcedisplay[8]'] = 12;
+    params['forcedisplay[9]'] = 14;
+    params['forcedisplay[10]'] = 15;
+    params['forcedisplay[11]'] = 16;
+    params['forcedisplay[12]'] = 17;
+    params['forcedisplay[13]'] = 18;
+    params['forcedisplay[14]'] = 19;
+    params['forcedisplay[15]'] = 21;
+    params['forcedisplay[16]'] = 30;
+    // ... agrega más si necesitas
+
+    const start = 0;
+    const end = limit - 1;
+    const qs = require('qs');
+    const queryString = qs.stringify(params, { encode: false });
+    const response = await this.axiosInstance.get('/search/Ticket', {
+      headers: {
+        'Session-Token': sessionToken,
+        'App-Token': this.config.glpiToken,
+        'Content-Type': 'application/json',
+        Range: `${start}-${end}`,
+      },
+      params,
+      paramsSerializer: () => queryString,
+    });
+    const { mapTicketFromSearch } = require('../shared/utils/map-tickets');
+    const mappedTickets = Array.isArray(response.data.data)
+      ? response.data.data.map(mapTicketFromSearch)
+      : [];
+
+    const limitedTickets = mappedTickets.slice(0, 3);
+
+    return {
+      tickets: limitedTickets,
+      paginacion: {
+        paginaActual: 1,
+        elementosPorPagina: 3,
+        total: limitedTickets.length,
+      },
+    };
+  }
+
+  async getMyTicketsReport(userId: number, sessionToken: string, dto: MyTicketsReportDto) {
+    const { page, limit, startDate, endDate, statusGroup } = dto;
+  
+    const criteria: any[] = [
+      { field: '_users_id_assign', searchtype: 'equals', value: userId },
+    ];
+  
+    if (statusGroup && STATUS_GROUPS[statusGroup]?.length > 0) {
+      criteria.push({
+        field: 'status',
+        searchtype: 'in',
+        value: STATUS_GROUPS[statusGroup].join(','),
+      });
+    }
+  
+    if (startDate) {
+      criteria.push({
+        field: 'date_creation',
+        searchtype: 'greaterthan',
+        value: startDate,
+      });
+    }
+  
+    if (endDate) {
+      criteria.push({
+        field: 'date_creation',
+        searchtype: 'lessthan',
+        value: endDate,
+      });
+    }
+  
+    const offset = (page - 1) * limit;
+  
+    const { data } = await getTickets(sessionToken, {
+      criteria,
+      sort: 'date_mod',
+      order: 'DESC',
+      range: [offset, offset + limit - 1],
+    });
+  
+    const rawTickets = data?.data ?? [];
+    const total = data?.total ?? rawTickets.length;
+    const tickets = rawTickets.map(mapTicket);
+  
+    const resumen = {
+      enCurso: 0,
+      enEspera: 0,
+      cerrados: 0,
+    };
+  
+    for (const t of rawTickets) {
+      const status = Number(t.status);
+      if (STATUS_GROUPS.en_curso.includes(status)) resumen.enCurso++;
+      else if (STATUS_GROUPS.en_espera.includes(status)) resumen.enEspera++;
+      else if (STATUS_GROUPS.cerrados.includes(status)) resumen.cerrados++;
+    }
+  
+    return {
+      data: tickets,
+      total,
+      page,
+      limit,
+      resumen,
+    };
+  }
   //Query params (opcional):
 
   //page=1

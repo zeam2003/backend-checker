@@ -18,7 +18,8 @@ export class TicketItemDto {
 
   @IsOptional()
   @IsString()
-  priority?: string;
+  @IsNumber()
+  priority?: string | number;
 
   @IsOptional()
   @IsString()
