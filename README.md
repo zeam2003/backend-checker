@@ -402,3 +402,37 @@ Headers: Authorization: Bearer <JWT_FROM_LOGIN>
 - Los campos se referencian por ID numérico en las consultas a GLPI
 - La paginación se maneja internamente para limitar resultados
 - Los tickets se mapean desde la respuesta cruda de GLPI a un formato estructurado
+
+---
+
+## Changelog
+
+### v1.1.0 - Corrección del Endpoint Next-to-Expire
+
+**Fecha:** Enero 2025
+
+**Problema resuelto:**
+El endpoint `/auth/my-tickets/next-to-expire` estaba devolviendo tickets de otros usuarios en lugar de filtrar correctamente por el usuario autenticado.
+
+**Causa raíz:**
+La consulta a GLPI tenía un operador lógico incorrecto en los criterios de búsqueda. El primer criterio de status usaba `AND` en lugar de `OR`, causando que GLPI interpretara incorrectamente la consulta.
+
+**Solución aplicada:**
+- **Archivo modificado:** `src/auth/auth.service.ts`
+- **Cambio:** Modificado el operador lógico en `getNextToExpireTickets()`
+- **Antes:** `criteria[1][link] = 'AND'` (primer status)
+- **Después:** `criteria[1][link] = 'OR'` (ambos criterios de status)
+
+**Consulta corregida:**
+```
+criteria[0]: Usuario asignado = {userId} (AND)
+criteria[1]: Status = 2 (OR) 
+criteria[2]: Status = 4 (OR)
+```
+
+**Resultado:**
+El endpoint ahora filtra correctamente y devuelve únicamente los tickets del usuario autenticado con status "EN_CURSO" (2) o "EN_ESPERA" (4), limitados a los 3 próximos a vencer.
+
+**Archivos afectados:**
+- `src/auth/auth.service.ts` - Lógica de consulta corregida
+- `src/shared/utils/map-tickets.ts` - Limpieza de logs de debug

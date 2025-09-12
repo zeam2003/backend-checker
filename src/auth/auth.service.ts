@@ -56,6 +56,7 @@ export class AuthService {
     };
   }
 
+  // Inicia sesión en GLPI y devuelve un token JWT
   async login(loginDto: LoginDto) {
     const response = await axios.post(
       `${this.config.apiUrl}initSession`,
@@ -106,6 +107,7 @@ export class AuthService {
     };
   }
 
+  // Cierra la sesión del usuario
   async logout(user: any) {
     const sessionToken = user?.sessionToken;
     if (!sessionToken) throw new Error('No hay token activo');
@@ -122,6 +124,8 @@ export class AuthService {
       );
     }
   }
+
+  //Trae los detalles de un usuario
   async getUserDetails(sessionToken: string) {
     const response = await axios.get(`${this.config.apiUrl}getFullSession`, {
       headers: {
@@ -146,6 +150,7 @@ export class AuthService {
     };
   }
 
+  // Trae todos los tickets de un determinado usuario
   async getMyTickets(
     sessionToken: string,
     userId: number,
@@ -254,6 +259,7 @@ export class AuthService {
     }
   }
 
+  // Trae los tickets próximos a vencer
   async getNextToExpireTickets(sessionToken: string, userId: number): Promise<{ tickets: Ticket[]; paginacion: { paginaActual: number; elementosPorPagina: number; total: number } }> {
     // Reutiliza la lógica de getMyTickets pero limitando a 3 y ordenando por time_to_resolve (ID 18)
     const status = [2, 4];
@@ -265,12 +271,12 @@ export class AuthService {
       'criteria[0][field]': 4, // usuario asignado
       'criteria[0][searchtype]': 'equals',
       'criteria[0][value]': userId,
-      'sort': 18, // ordenar por time_to_resolve
-      'order': 'ASC',
+      //'sort': 18, // ordenar por time_to_resolve
+      //'order': 'ASC',
     };
     let criteriaIndex = 1;
     status.forEach((stat, idx) => {
-      params[`criteria[${criteriaIndex}][link]`] = idx === 0 ? 'AND' : 'OR';
+      params[`criteria[${criteriaIndex}][link]`] = 'OR'; // Cambiar a OR para ambos criterios de status
       params[`criteria[${criteriaIndex}][field]`] = 12;
       params[`criteria[${criteriaIndex}][searchtype]`] = 'equals';
       params[`criteria[${criteriaIndex}][value]`] = stat;
@@ -299,8 +305,10 @@ export class AuthService {
 
     const start = 0;
     const end = limit - 1;
+    
     const qs = require('qs');
     const queryString = qs.stringify(params, { encode: false });
+    
     const response = await this.axiosInstance.get('/search/Ticket', {
       headers: {
         'Session-Token': sessionToken,
@@ -311,6 +319,7 @@ export class AuthService {
       params,
       paramsSerializer: () => queryString,
     });
+    
     const { mapTicketFromSearch } = require('../shared/utils/map-tickets');
     const mappedTickets = Array.isArray(response.data.data)
       ? response.data.data.map(mapTicketFromSearch)
@@ -329,61 +338,85 @@ export class AuthService {
   }
 
   async getMyTicketsReport(userId: number, sessionToken: string, dto: MyTicketsReportDto) {
-    const { page, limit, startDate, endDate, statusGroup } = dto;
+    const { page, limit, startDate, endDate, statusGroup, status } = dto;
   
     const criteria: any[] = [
-      { field: '_users_id_assign', searchtype: 'equals', value: userId },
+      { field: 4, searchtype: 'equals', value: userId, link: 'AND' }, // ID del campo usuario asignado
     ];
-  
-    if (statusGroup && STATUS_GROUPS[statusGroup]?.length > 0) {
+
+    // Priorizar array de status específicos sobre statusGroup
+    if (status && status.length > 0) {
       criteria.push({
-        field: 'status',
+        field: 12, // ID del campo status
+        searchtype: 'in',
+        value: status.join(','),
+        link: 'AND'
+      });
+    } else if (statusGroup && STATUS_GROUPS[statusGroup]?.length > 0) {
+      criteria.push({
+        field: 12, // ID del campo status
         searchtype: 'in',
         value: STATUS_GROUPS[statusGroup].join(','),
+        link: 'AND'
       });
     }
-  
+
     if (startDate) {
       criteria.push({
-        field: 'date_creation',
-        searchtype: 'greaterthan',
+        field: 15, // ID del campo date_creation
+        searchtype: 'morethan',
         value: startDate,
+        link: 'AND'
       });
     }
-  
+
     if (endDate) {
       criteria.push({
-        field: 'date_creation',
+        field: 15, // ID del campo date_creation
         searchtype: 'lessthan',
         value: endDate,
+        link: 'AND'
       });
     }
   
-    const offset = (page - 1) * limit;
+    // Primero obtener todos los tickets para el resumen (sin paginación)
+    const { data: allData } = await getTickets(sessionToken, {
+      criteria,
+      sort: 'date_mod',
+      order: 'DESC',
+      range: [0, 9999], // Obtener hasta 10000 tickets para el resumen
+    });
   
-    const { data } = await getTickets(sessionToken, {
+    const allTickets = allData?.data ?? [];
+    const total = allData?.total ?? allTickets.length;
+  
+    // Calcular resumen sobre todos los tickets
+    const resumen = {
+      enCurso: 0,
+      enEspera: 0,
+      resueltos: 0,
+      cerrados: 0,
+    };
+  
+    for (const t of allTickets) {
+      const status = Number(t[12]); // El status está en el índice 12 del array
+      if (STATUS_GROUPS.en_curso.includes(status)) resumen.enCurso++;
+      else if (STATUS_GROUPS.en_espera.includes(status)) resumen.enEspera++;
+      else if (STATUS_GROUPS.resueltos.includes(status)) resumen.resueltos++;
+      else if (STATUS_GROUPS.cerrados.includes(status)) resumen.cerrados++;
+    }
+
+    // Luego obtener solo los tickets de la página actual
+    const offset = (page - 1) * limit;
+    const { data: pageData } = await getTickets(sessionToken, {
       criteria,
       sort: 'date_mod',
       order: 'DESC',
       range: [offset, offset + limit - 1],
     });
-  
-    const rawTickets = data?.data ?? [];
-    const total = data?.total ?? rawTickets.length;
-    const tickets = rawTickets.map(mapTicket);
-  
-    const resumen = {
-      enCurso: 0,
-      enEspera: 0,
-      cerrados: 0,
-    };
-  
-    for (const t of rawTickets) {
-      const status = Number(t.status);
-      if (STATUS_GROUPS.en_curso.includes(status)) resumen.enCurso++;
-      else if (STATUS_GROUPS.en_espera.includes(status)) resumen.enEspera++;
-      else if (STATUS_GROUPS.cerrados.includes(status)) resumen.cerrados++;
-    }
+
+    const rawTickets = pageData?.data ?? [];
+    const tickets = rawTickets.map(mapTicketFromSearch);
   
     return {
       data: tickets,

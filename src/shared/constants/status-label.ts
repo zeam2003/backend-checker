@@ -19,6 +19,7 @@ export const STATUS_LABELS = {
 export const STATUS_GROUPS = {
   todos: [],
   en_curso: [2],
-  en_espera: [4],
+  en_espera: [3],
+  resueltos: [4],
   cerrados: [5, 6],
 };

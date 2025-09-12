@@ -154,7 +154,7 @@ async getMyTicketsReport(
   @Query() query: MyTicketsReportDto,
   @Req() req: RequestWithUser,
 ) {
-  const userId = req.user?.glpiId;
+  const userId = req.user?.userId;
   const sessionToken = req.user?.sessionToken;
   return this.authService.getMyTicketsReport(userId, sessionToken, query);
 }
