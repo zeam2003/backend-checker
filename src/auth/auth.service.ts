@@ -340,55 +340,71 @@ export class AuthService {
   async getMyTicketsReport(userId: number, sessionToken: string, dto: MyTicketsReportDto) {
     const { page, limit, startDate, endDate, statusGroup, status } = dto;
   
-    const criteria: any[] = [
-      { field: 4, searchtype: 'equals', value: userId, link: 'AND' }, // ID del campo usuario asignado
-    ];
+    // Usar la misma lógica que getMyTickets que funciona correctamente
+    const params: any = {
+      'criteria[0][link]': 'AND',
+      'criteria[0][field]': 4, // ID del campo usuario asignado
+      'criteria[0][searchtype]': 'equals',
+      'criteria[0][value]': userId,
+    };
+
+    // Agregar campos a mostrar
+    const forceDisplayFields = [1, 2, 3, 4, 5, 7, 10, 11, 12, 14, 15, 16, 17, 18, 19, 21, 30];
+    forceDisplayFields.forEach((field, index) => {
+      params[`forcedisplay[${index}]`] = field;
+    });
+
+    let criteriaIndex = 1;
 
     // Priorizar array de status específicos sobre statusGroup
-    if (status && status.length > 0) {
-      criteria.push({
-        field: 12, // ID del campo status
-        searchtype: 'in',
-        value: status.join(','),
-        link: 'AND'
-      });
-    } else if (statusGroup && STATUS_GROUPS[statusGroup]?.length > 0) {
-      criteria.push({
-        field: 12, // ID del campo status
-        searchtype: 'in',
-        value: STATUS_GROUPS[statusGroup].join(','),
-        link: 'AND'
+    const statusArray = status && status.length > 0 ? status : (statusGroup && STATUS_GROUPS[statusGroup] ? STATUS_GROUPS[statusGroup] : []);
+    
+    if (statusArray.length > 0) {
+      statusArray.forEach((stat, idx) => {
+        params[`criteria[${criteriaIndex}][link]`] = idx === 0 ? 'OR' : 'OR';
+        params[`criteria[${criteriaIndex}][field]`] = 12; // ID del campo status
+        params[`criteria[${criteriaIndex}][searchtype]`] = 'equals';
+        params[`criteria[${criteriaIndex}][value]`] = stat;
+        params[`criteria[${criteriaIndex}][group]`] = 1;
+        criteriaIndex++;
       });
     }
 
     if (startDate) {
-      criteria.push({
-        field: 15, // ID del campo date_creation
-        searchtype: 'morethan',
-        value: startDate,
-        link: 'AND'
-      });
+      params[`criteria[${criteriaIndex}][link]`] = 'AND';
+      params[`criteria[${criteriaIndex}][field]`] = 15; // ID del campo date_creation
+      params[`criteria[${criteriaIndex}][searchtype]`] = 'morethan';
+      params[`criteria[${criteriaIndex}][value]`] = startDate;
+      criteriaIndex++;
     }
 
     if (endDate) {
-      criteria.push({
-        field: 15, // ID del campo date_creation
-        searchtype: 'lessthan',
-        value: endDate,
-        link: 'AND'
-      });
+      params[`criteria[${criteriaIndex}][link]`] = 'AND';
+      params[`criteria[${criteriaIndex}][field]`] = 15; // ID del campo date_creation
+      params[`criteria[${criteriaIndex}][searchtype]`] = 'lessthan';
+      params[`criteria[${criteriaIndex}][value]`] = endDate;
+      criteriaIndex++;
     }
+
+    console.log('🔍 Criterios construidos:', JSON.stringify(params, null, 2));
   
     // Primero obtener todos los tickets para el resumen (sin paginación)
-    const { data: allData } = await getTickets(sessionToken, {
-      criteria,
-      sort: 'date_mod',
-      order: 'DESC',
-      range: [0, 9999], // Obtener hasta 10000 tickets para el resumen
+    const queryString = qs.stringify(params, { encode: false });
+    const fullUrl = `${this.config.apiUrl}/search/Ticket?${queryString}`;
+    console.log('🌐 URL completa enviada a GLPI:', fullUrl);
+    const allResponse = await this.axiosInstance.get('/search/Ticket', {
+      headers: {
+        'Session-Token': sessionToken,
+        'App-Token': this.config.glpiToken,
+        'Content-Type': 'application/json',
+        Range: '0-9999',
+      },
+      params,
+      paramsSerializer: () => queryString,
     });
   
-    const allTickets = allData?.data ?? [];
-    const total = allData?.total ?? allTickets.length;
+    const allTickets = allResponse.data?.data ?? [];
+    const total = allResponse.data?.total ?? allTickets.length;
   
     // Calcular resumen sobre todos los tickets
     const resumen = {
@@ -408,14 +424,18 @@ export class AuthService {
 
     // Luego obtener solo los tickets de la página actual
     const offset = (page - 1) * limit;
-    const { data: pageData } = await getTickets(sessionToken, {
-      criteria,
-      sort: 'date_mod',
-      order: 'DESC',
-      range: [offset, offset + limit - 1],
+    const pageResponse = await this.axiosInstance.get('/search/Ticket', {
+      headers: {
+        'Session-Token': sessionToken,
+        'App-Token': this.config.glpiToken,
+        'Content-Type': 'application/json',
+        Range: `${offset}-${offset + limit - 1}`,
+      },
+      params,
+      paramsSerializer: () => queryString,
     });
 
-    const rawTickets = pageData?.data ?? [];
+    const rawTickets = pageResponse.data?.data ?? [];
     const tickets = rawTickets.map(mapTicketFromSearch);
   
     return {

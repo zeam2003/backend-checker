@@ -39,6 +39,9 @@ export async function getTickets(sessionToken: string, options: any) {
       params[`criteria[${index}][field]`] = criterion.field;
       params[`criteria[${index}][searchtype]`] = criterion.searchtype;
       params[`criteria[${index}][value]`] = criterion.value;
+      if (criterion.group) {
+        params[`criteria[${index}][group]`] = criterion.group;
+      }
     });
   }
 

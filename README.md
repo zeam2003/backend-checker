@@ -141,6 +141,74 @@ GET /auth/my-tickets?page=1&limit=20&status=2&status=4&startDate=2025-07-01&endD
 
 ---
 
+#### `POST /auth/my-tickets/report` ⚠️ **EN DESARROLLO**
+**Descripción:** Obtiene tickets del usuario con resumen estadístico por categorías de estado. Incluye contadores de tickets por grupo (en curso, en espera, resueltos, cerrados).
+
+**Headers:** `Authorization: Bearer <JWT_TOKEN>`
+
+**Body:**
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "startDate": "2025-01-01",
+  "endDate": "2025-01-31",
+  "statusGroup": "en_curso",
+  "status": [2, 4]
+}
+```
+
+**Parámetros del Body:**
+- `page` (opcional): Número de página (default: 1)
+- `limit` (opcional): Elementos por página (default: 10)
+- `startDate` (opcional): Fecha de inicio (YYYY-MM-DD)
+- `endDate` (opcional): Fecha de fin (YYYY-MM-DD)
+- `statusGroup` (opcional): Grupo de estados predefinido ("en_curso", "en_espera", "resueltos", "cerrados")
+- `status` (opcional): Array de códigos de estado específicos (tiene prioridad sobre statusGroup)
+
+**Respuesta esperada:**
+```json
+{
+  "data": [
+    {
+      "id": 35422,
+      "name": "Ticket de ejemplo",
+      "status_code": 2,
+      "status": "EN_CURSO",
+      "priority": 5,
+      "category": "CIBERSEGURIDAD",
+      "assignedTo": "79",
+      "date_creation": "2025-01-15 10:30:00",
+      "time_to_resolve": "2025-01-22 10:30:00"
+    }
+  ],
+  "resumen": {
+    "enCurso": 5,
+    "enEspera": 3,
+    "resueltos": 12,
+    "cerrados": 8
+  },
+  "paginacion": {
+    "paginaActual": 1,
+    "elementosPorPagina": 10,
+    "total": 28
+  }
+}
+```
+
+**Estado actual:** 
+- ✅ Implementación básica completada
+- ✅ Corrección de lógica de criterios (OR en lugar de AND para status)
+- ✅ Agregado logging de URL para debugging
+- ⚠️ **PENDIENTE DE PRUEBAS** - El endpoint requiere validación completa debido a errores de compilación previos
+
+**Problemas resueltos:**
+1. **Error de compilación:** Corregido `this.config.glpiUrl` → `this.config.apiUrl`
+2. **Lógica de status:** Corregido operador AND → OR para permitir múltiples estados
+3. **Logging:** Agregada URL completa para debugging manual en GLPI
+
+---
+
 ### Endpoint de Prueba
 
 #### `GET /auth/test-glpi-simple`
@@ -406,6 +474,45 @@ Headers: Authorization: Bearer <JWT_FROM_LOGIN>
 ---
 
 ## Changelog
+
+### v1.2.0 - Nuevo Endpoint de Reportes con Resumen Estadístico
+
+**Fecha:** Enero 2025
+
+**Nuevo endpoint agregado:**
+`POST /auth/my-tickets/report` - Endpoint para obtener tickets del usuario con resumen estadístico por categorías de estado.
+
+**Características implementadas:**
+- **Filtrado avanzado:** Por fechas, status individual o grupos de status predefinidos
+- **Resumen estadístico:** Contadores automáticos por categorías (en curso, en espera, resueltos, cerrados)
+- **Paginación:** Soporte completo para paginación de resultados
+- **Priorización de filtros:** Array de status específicos tiene prioridad sobre statusGroup
+
+**Problemas encontrados y resueltos:**
+1. **Error de compilación:** 
+   - **Problema:** `Property 'glpiUrl' does not exist on type 'AppConfigService'`
+   - **Solución:** Corregido `this.config.glpiUrl` → `this.config.apiUrl`
+
+2. **Lógica de criterios de búsqueda:**
+   - **Problema:** Solo devolvía tickets con el primer status del array
+   - **Solución:** Corregido operador lógico de `AND` → `OR` para criterios de status
+
+3. **Debugging mejorado:**
+   - **Agregado:** Logging de URL completa enviada a GLPI para pruebas manuales
+   - **Formato:** `🌐 URL completa enviada a GLPI: {url}`
+
+**Estado actual:**
+- ✅ Implementación básica completada
+- ✅ Errores de compilación corregidos
+- ✅ Lógica de filtros corregida
+- ⚠️ **PENDIENTE DE PRUEBAS COMPLETAS** - Requiere validación funcional del endpoint
+
+**Archivos modificados:**
+- `src/auth/auth.service.ts` - Implementación del método `getMyTicketsReport()`
+- `src/auth/auth.controller.ts` - Endpoint POST `/my-tickets/report`
+- `src/auth/dto/my-tickets-report.dto.ts` - DTO para validación de parámetros
+
+---
 
 ### v1.1.0 - Corrección del Endpoint Next-to-Expire
 
