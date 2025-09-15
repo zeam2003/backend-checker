@@ -9,7 +9,7 @@ export class MyTicketsReportDto {
 
   @IsOptional()
   @IsArray()
-  @IsIn([1, 2, 3, 4, 5], { each: true })
+  @IsIn([1, 2, 4, 5, 6], { each: true })
   @Type(() => Number)
   status?: number[];
 

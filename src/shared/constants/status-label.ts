@@ -11,15 +11,15 @@
 export const STATUS_LABELS = {
   1: 'Nuevo',
   2: 'En curso',
-  3: 'En espera',
-  4: 'Resuelto',
-  5: 'Cerrado',
+  4: 'En espera',
+  5: 'Resuelto',
+  6: 'Cerrado',
 };
 
 export const STATUS_GROUPS = {
   todos: [],
   en_curso: [2],
-  en_espera: [3],
-  resueltos: [4],
-  cerrados: [5, 6],
+  en_espera: [4],
+  resueltos: [5],
+  cerrados: [6],
 };

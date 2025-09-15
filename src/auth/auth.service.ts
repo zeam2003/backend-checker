@@ -364,7 +364,7 @@ export class AuthService {
     
     if (statusArray.length > 0) {
       statusArray.forEach((stat, idx) => {
-        params[`criteria[${criteriaIndex}][link]`] = idx === 0 ? 'OR' : 'OR';
+        params[`criteria[${criteriaIndex}][link]`] = idx === 0 ? 'AND' : 'OR';
         params[`criteria[${criteriaIndex}][field]`] = 12; // ID del campo status
         params[`criteria[${criteriaIndex}][searchtype]`] = 'equals';
         params[`criteria[${criteriaIndex}][value]`] = stat;
@@ -374,25 +374,31 @@ export class AuthService {
     }
 
     if (startDate) {
+      // Formatear fecha para GLPI: agregar tiempo si no está presente
+      const formattedStartDate = startDate.includes(' ') ? startDate : `${startDate} 00:00:00`;
       params[`criteria[${criteriaIndex}][link]`] = 'AND';
       params[`criteria[${criteriaIndex}][field]`] = 15; // ID del campo date_creation
       params[`criteria[${criteriaIndex}][searchtype]`] = 'morethan';
-      params[`criteria[${criteriaIndex}][value]`] = startDate;
+      params[`criteria[${criteriaIndex}][value]`] = formattedStartDate;
+      // Sin grupo para que se aplique con AND global
       criteriaIndex++;
     }
 
     if (endDate) {
+      // Formatear fecha para GLPI: agregar tiempo si no está presente (fin del día)
+      const formattedEndDate = endDate.includes(' ') ? endDate : `${endDate} 23:59:59`;
       params[`criteria[${criteriaIndex}][link]`] = 'AND';
       params[`criteria[${criteriaIndex}][field]`] = 15; // ID del campo date_creation
       params[`criteria[${criteriaIndex}][searchtype]`] = 'lessthan';
-      params[`criteria[${criteriaIndex}][value]`] = endDate;
+      params[`criteria[${criteriaIndex}][value]`] = formattedEndDate;
+      // Sin grupo para que se aplique con AND global
       criteriaIndex++;
     }
 
     console.log('🔍 Criterios construidos:', JSON.stringify(params, null, 2));
   
     // Primero obtener todos los tickets para el resumen (sin paginación)
-    const queryString = qs.stringify(params, { encode: false });
+    const queryString = qs.stringify(params, { encode: true });
     const fullUrl = `${this.config.apiUrl}/search/Ticket?${queryString}`;
     console.log('🌐 URL completa enviada a GLPI:', fullUrl);
     const allResponse = await this.axiosInstance.get('/search/Ticket', {

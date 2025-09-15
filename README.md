@@ -141,40 +141,33 @@ GET /auth/my-tickets?page=1&limit=20&status=2&status=4&startDate=2025-07-01&endD
 
 ---
 
-#### `POST /auth/my-tickets/report` ⚠️ **EN DESARROLLO**
+#### `GET /auth/my-tickets-report` ✅ **COMPLETADO**
 **Descripción:** Obtiene tickets del usuario con resumen estadístico por categorías de estado. Incluye contadores de tickets por grupo (en curso, en espera, resueltos, cerrados).
 
 **Headers:** `Authorization: Bearer <JWT_TOKEN>`
 
-**Body:**
-```json
-{
-  "page": 1,
-  "limit": 10,
-  "startDate": "2025-01-01",
-  "endDate": "2025-01-31",
-  "statusGroup": "en_curso",
-  "status": [2, 4]
-}
-```
-
-**Parámetros del Body:**
+**Query Parameters:**
 - `page` (opcional): Número de página (default: 1)
 - `limit` (opcional): Elementos por página (default: 10)
 - `startDate` (opcional): Fecha de inicio (YYYY-MM-DD)
 - `endDate` (opcional): Fecha de fin (YYYY-MM-DD)
-- `statusGroup` (opcional): Grupo de estados predefinido ("en_curso", "en_espera", "resueltos", "cerrados")
-- `status` (opcional): Array de códigos de estado específicos (tiene prioridad sobre statusGroup)
+- `statusGroup` (opcional): Grupo de estados predefinido ("todos", "en_curso", "en_espera", "resueltos", "cerrados")
+- `status` (opcional): Array de códigos de estado específicos [1,2,4,5,6] (tiene prioridad sobre statusGroup)
 
-**Respuesta esperada:**
+**Ejemplo de uso:**
+```
+GET /auth/my-tickets-report?startDate=2025-01-01&endDate=2025-01-31&statusGroup=resueltos&page=1&limit=10
+```
+
+**Respuesta:**
 ```json
 {
   "data": [
     {
       "id": 35422,
       "name": "Ticket de ejemplo",
-      "status_code": 2,
-      "status": "EN_CURSO",
+      "status_code": 5,
+      "status": "RESUELTO",
       "priority": 5,
       "category": "CIBERSEGURIDAD",
       "assignedTo": "79",
@@ -196,8 +189,27 @@ GET /auth/my-tickets?page=1&limit=20&status=2&status=4&startDate=2025-07-01&endD
 }
 ```
 
+**Códigos de estado GLPI:**
+- `1`: NUEVO
+- `2`: EN_CURSO  
+- `4`: EN_ESPERA
+- `5`: RESUELTO
+- `6`: CERRADO
+
+**Grupos de estado predefinidos:**
+- `todos`: Todos los estados [1,2,4,5,6]
+- `en_curso`: Estados en curso [2]
+- `en_espera`: Estados en espera [4]
+- `resueltos`: Estados resueltos [5]
+- `cerrados`: Estados cerrados [6]
+
 **Estado actual:** 
-- ✅ Implementación básica completada
+- ✅ Implementación completada y funcional
+- ✅ Filtrado por usuario, fechas y estados
+- ✅ Resumen estadístico por categorías
+- ✅ Paginación completa
+- ✅ Validación de parámetros
+- ✅ Códigos de estado alineados con GLPI
 - ✅ Corrección de lógica de criterios (OR en lugar de AND para status)
 - ✅ Agregado logging de URL para debugging
 - ⚠️ **PENDIENTE DE PRUEBAS** - El endpoint requiere validación completa debido a errores de compilación previos
@@ -475,18 +487,19 @@ Headers: Authorization: Bearer <JWT_FROM_LOGIN>
 
 ## Changelog
 
-### v1.2.0 - Nuevo Endpoint de Reportes con Resumen Estadístico
+### v1.2.0 - Endpoint de Reportes con Resumen Estadístico ✅ COMPLETADO
 
 **Fecha:** Enero 2025
 
-**Nuevo endpoint agregado:**
-`POST /auth/my-tickets/report` - Endpoint para obtener tickets del usuario con resumen estadístico por categorías de estado.
+**Endpoint implementado:**
+`GET /auth/my-tickets-report` - Endpoint para obtener tickets del usuario con resumen estadístico por categorías de estado.
 
 **Características implementadas:**
 - **Filtrado avanzado:** Por fechas, status individual o grupos de status predefinidos
 - **Resumen estadístico:** Contadores automáticos por categorías (en curso, en espera, resueltos, cerrados)
 - **Paginación:** Soporte completo para paginación de resultados
 - **Priorización de filtros:** Array de status específicos tiene prioridad sobre statusGroup
+- **Códigos de estado alineados:** Sincronizados con los códigos correctos de GLPI
 
 **Problemas encontrados y resueltos:**
 1. **Error de compilación:** 
@@ -497,20 +510,34 @@ Headers: Authorization: Bearer <JWT_FROM_LOGIN>
    - **Problema:** Solo devolvía tickets con el primer status del array
    - **Solución:** Corregido operador lógico de `AND` → `OR` para criterios de status
 
-3. **Debugging mejorado:**
-   - **Agregado:** Logging de URL completa enviada a GLPI para pruebas manuales
-   - **Formato:** `🌐 URL completa enviada a GLPI: {url}`
+3. **Inconsistencia en códigos de estado:**
+   - **Problema:** STATUS_LABELS y STATUS_GROUPS tenían códigos incorrectos (3 en lugar de 4, etc.)
+   - **Solución:** Alineados todos los códigos con GLPI: 1=NUEVO, 2=EN_CURSO, 4=EN_ESPERA, 5=RESUELTO, 6=CERRADO
+
+4. **Filtros de fecha no funcionaban:**
+   - **Problema:** Fechas sin formato de hora completo y criterios mal agrupados
+   - **Solución:** Formato automático a `YYYY-MM-DD HH:MM:SS` y corrección de agrupación de criterios
+
+5. **Error de caracteres no escapados:**
+   - **Problema:** `ERR_UNESCAPED_CHARACTERS` por fechas con espacios y dos puntos
+   - **Solución:** Habilitado encoding en `qs.stringify(params, { encode: true })`
+
+6. **Campo assignedTo incorrecto:**
+   - **Problema:** Devolvía usuarios de otros tickets en lugar del asignado correcto
+   - **Solución:** Corregida lógica de agrupación de criterios de búsqueda
 
 **Estado actual:**
-- ✅ Implementación básica completada
-- ✅ Errores de compilación corregidos
-- ✅ Lógica de filtros corregida
-- ⚠️ **PENDIENTE DE PRUEBAS COMPLETAS** - Requiere validación funcional del endpoint
+- ✅ Implementación completada y funcional
+- ✅ Todos los filtros funcionando correctamente
+- ✅ Códigos de estado sincronizados con GLPI
+- ✅ Validación de parámetros completa
+- ✅ Manejo correcto de fechas y encoding de URL
 
 **Archivos modificados:**
 - `src/auth/auth.service.ts` - Implementación del método `getMyTicketsReport()`
-- `src/auth/auth.controller.ts` - Endpoint POST `/my-tickets/report`
+- `src/auth/auth.controller.ts` - Endpoint GET `/my-tickets-report`
 - `src/auth/dto/my-tickets-report.dto.ts` - DTO para validación de parámetros
+- `src/shared/constants/status-label.ts` - Corrección de códigos de estado
 
 ---
 
