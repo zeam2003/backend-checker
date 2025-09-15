@@ -4,8 +4,8 @@ import { Type } from 'class-transformer';
 
 export class MyTicketsReportDto {
   @IsOptional()
-  @IsIn(['todos', 'en_curso', 'en_espera', 'resueltos', 'cerrados'])
-  statusGroup?: 'todos' | 'en_curso' | 'en_espera' | 'resueltos' | 'cerrados';
+  @IsIn(['todos', 'all', 'en_curso', 'en_espera', 'resueltos', 'cerrados'])
+  statusGroup?: 'todos' | 'all' | 'en_curso' | 'en_espera' | 'resueltos' | 'cerrados';
 
   @IsOptional()
   @IsArray()

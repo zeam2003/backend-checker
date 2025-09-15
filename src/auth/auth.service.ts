@@ -346,6 +346,7 @@ export class AuthService {
       'criteria[0][field]': 4, // ID del campo usuario asignado
       'criteria[0][searchtype]': 'equals',
       'criteria[0][value]': userId,
+      'criteria[0][group]': 0, // Grupo separado para el filtro de usuario
     };
 
     // Agregar campos a mostrar
@@ -357,7 +358,9 @@ export class AuthService {
     let criteriaIndex = 1;
 
     // Priorizar array de status específicos sobre statusGroup
-    const statusArray = status && status.length > 0 ? status : (statusGroup && STATUS_GROUPS[statusGroup] ? STATUS_GROUPS[statusGroup] : []);
+    // Mapear 'all' a 'todos' para compatibilidad
+    const normalizedStatusGroup = statusGroup === 'all' ? 'todos' : statusGroup;
+    const statusArray = status && status.length > 0 ? status : (normalizedStatusGroup && STATUS_GROUPS[normalizedStatusGroup] ? STATUS_GROUPS[normalizedStatusGroup] : []);
     
     if (statusArray.length > 0) {
       statusArray.forEach((stat, idx) => {

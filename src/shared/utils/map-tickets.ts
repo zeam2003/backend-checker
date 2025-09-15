@@ -34,18 +34,23 @@ export function mapTicket(ticket: any): Ticket {
 
 // Nuevo: mapeo para /search/Ticket (campos numéricos)
 export function mapTicketFromSearch(ticket: any): Ticket {
+  // Asegurarse de que los valores numéricos sean tratados como números
+  const priority = typeof ticket[3] === 'number' ? ticket[3] : (parseInt(ticket[3]) || 0);
+  
   return {
     id: ticket[2],
     name: ticket[1],
     status_code: ticket[12],
     status: STATUS_LABELS[ticket[12]] || 'Desconocido',
-    priority: ticket[3] ?? 'N/A',
+    priority: priority || 0, // Asegurar que priority siempre sea un número
     category: ticket[7] ?? 'N/A',
-    assignedTo: ticket[4]?.toString() || 'Sin asignar',
-    entity: ticket[5]?.toString() || 'N/A',
-    urgency: ticket[10] ?? '',
-    impact: ticket[11] ?? '',
-    type: ticket[14] ?? '',
+    // Devolver solo el ID del usuario asignado
+    assignedTo: typeof ticket[4] === 'string' && ticket[4].match(/^\d+$/) ? 
+      ticket[4] : (ticket[4]?.toString() || 'Sin asignar'), // Índice 4 corresponde a assignedTo
+    entity: ticket[5]?.toString() || 'N/A', // Índice 5 corresponde a entity
+    urgency: ticket[10] || 0,
+    impact: ticket[11] || 0,
+    type: ticket[14] || 1,
     date_creation: ticket[15] || '',
     closedate: ticket[16] || '',
     solvedate: ticket[17] || '',
